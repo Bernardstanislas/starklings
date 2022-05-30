@@ -1,6 +1,7 @@
 from pathlib import Path
 from unittest import mock
 from unittest.mock import mock_open
+import pytest
 
 from .solution import SolutionPatcher
 
@@ -23,13 +24,21 @@ def multi_mock_open(*file_contents):
     return mock_opener
 
 
-def test_find_patch_ok(mocker):
+@pytest.fixture(name="patcher")
+def solution_patcher(mocker):
+    mocker.patch("os.path.exists", new=lambda x: True)
     exercise_path = Path("./exercise/beginner/ex00.cairo")
 
-    patcher = SolutionPatcher(exercise_path)
+    mocker.patch("src.solution.Repo", autospec=True)
 
-    mocker.patch("os.path.exists", new=lambda x: True)
+    # repo = mocked_repo.return_value
+    # repo.git.stash.return_value = "stash@{0}", "stash message"
 
+    patcher = SolutionPatcher(exercise_path, Path("."))
+    return patcher
+
+
+def test_find_patch_ok(patcher):
     assert patcher.find_patch(patcher.path) == Path(
         "./.patches/beginner/ex00.cairo.patch"
     )
@@ -38,16 +47,14 @@ def test_find_patch_ok(mocker):
 def test_find_patch_ko(mocker):
     exercise_path = Path("./exercise/beginner/ex00.cairo")
 
-    patcher = SolutionPatcher(exercise_path)
+    patcher = SolutionPatcher(exercise_path, Path("."))
 
     mocker.patch("os.path.exists", new=lambda x: False)
 
     assert patcher.find_patch(patcher.path) is None
 
 
-def test_get_solution(mocker):
-    exercise_path = Path("./exercise/beginner/ex00.cairo")
-    mocker.patch("os.path.exists", new=lambda x: True)
+def test_get_solution(patcher):
 
     contents = [
         b"diff --git a/exercises/syntax/syntax01.cairo b/exercises/syntax/syntax01.cairo\nindex f5b07a3..2e4537d 100644\n--- a/exercises/syntax/syntax01.cairo\n+++ b/exercises/syntax/syntax01.cairo\n@@ -0,0 +1 @@\n+%lang starknet\n",
@@ -56,7 +63,6 @@ def test_get_solution(mocker):
 
     multi_file_mock = multi_mock_open(*contents)
 
-    patcher = SolutionPatcher(exercise_path)
     solution = ""
     with mock.patch("builtins.open", multi_file_mock):
         solution = patcher.get_solution()
